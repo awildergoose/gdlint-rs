@@ -462,7 +462,7 @@ impl Traverser {
 
     pub fn visit_inferred_type(&mut self, node: InferredType) -> anyhow::Result<String> {
         // TODO
-        Ok(string_of_node!(self, node))
+        Ok(String::new())
     }
 
     pub fn visit_lambda(&mut self, node: Lambda) -> anyhow::Result<String> {
@@ -593,18 +593,24 @@ impl Traverser {
     }
 
     pub fn visit_variable_statement(&mut self, node: VariableStatement) -> anyhow::Result<()> {
+        // this is an unholy mess
         let var_type = node
             .r#type()
             .as_ref()
-            .map(|v| match wrap_err!(v, "failed to get type node")? {
-                crate::astgen::gdscript::anon_unions::InferredType_Type::InferredType(s) => {
-                    Ok(self.visit_inferred_type(s))
-                }
-                crate::astgen::gdscript::anon_unions::InferredType_Type::Type(s) => {
-                    Ok(self.visit_type(s))
-                }
-            })
-            .map(std::result::Result::flatten)
+            .map(
+                |v| -> Result<Option<Result<String, anyhow::Error>>, anyhow::Error> {
+                    match wrap_err!(v, "failed to get type node")? {
+                        crate::astgen::gdscript::anon_unions::InferredType_Type::InferredType(
+                            s,
+                        ) => Ok(None),
+                        crate::astgen::gdscript::anon_unions::InferredType_Type::Type(s) => {
+                            Ok(Some(self.visit_type(s)))
+                        }
+                    }
+                },
+            )
+            .transpose()?
+            .flatten()
             .transpose()?;
         let value = node
             .value()
