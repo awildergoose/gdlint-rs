@@ -1,3 +1,5 @@
+use std::{cell::RefCell, rc::Rc};
+
 use crate::{
     astgen::{
         ast::{GDNode, GDNodeKind},
@@ -11,15 +13,17 @@ pub fn parse_code(code: String) -> anyhow::Result<GDNode> {
         &tree_sitter_gdscript::LANGUAGE.into(),
     )?;
 
+    let root = Rc::new(RefCell::new(GDNode::new(
+        GDNodeKind::Document {
+            extends: None,
+            class_name: None,
+        },
+        vec![],
+    )));
     let mut traverser = Traverser {
         source: code.clone(),
-        root: GDNode::new(
-            GDNodeKind::Document {
-                extends: None,
-                class_name: None,
-            },
-            vec![],
-        ),
+        root: root.clone(),
+        scope: root.clone(),
     };
     let tree = wrap_err!(parser.parse(code, None), "Failed to parse with tree-sitter")?;
     if tree.root_node().is_err() {
@@ -30,5 +34,5 @@ pub fn parse_code(code: String) -> anyhow::Result<GDNode> {
     let root_node = tree.root_node()?;
     traverser.traverse(&root_node)?;
 
-    Ok(traverser.root)
+    Ok(root.borrow().clone())
 }

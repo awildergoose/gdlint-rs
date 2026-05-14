@@ -1,3 +1,6 @@
+use std::{cell::RefCell, rc::Rc};
+
+use anyhow::Context;
 use type_sitter::Node;
 
 use crate::astgen::ast::GDNode;
@@ -10,12 +13,12 @@ macro_rules! traverse_cases {
                     #[allow(unused_variables)]
                     let $node = $node.downcast::<$name>().unwrap();
                     paste::paste! {
-                        $self.[<visit_ $name:snake>]($node)?;
+                        $self.[<visit_ $name:snake>]($node).context(format!("Parsing {:#?}", $node))?;
                     }
                 }
             ),+
             _ => {
-                println!("warn: unknown node type: {:?} kind: {:?}", $node, $node.kind());
+                eprintln!("error: unknown node type: {:?} kind: {:?}", $node, $node.kind());
             }
         }
     };
@@ -23,7 +26,8 @@ macro_rules! traverse_cases {
 
 pub struct Traverser {
     pub source: String,
-    pub root: GDNode,
+    pub root: Rc<RefCell<GDNode>>,
+    pub scope: Rc<RefCell<GDNode>>,
 }
 
 impl Traverser {

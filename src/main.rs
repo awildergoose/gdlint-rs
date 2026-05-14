@@ -36,7 +36,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     for file in files {
-        println!("Processing {}", file.display());
+        // println!("Processing {}", file.display());
 
         let code = std::fs::read_to_string(file)?;
 

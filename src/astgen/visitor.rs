@@ -2,7 +2,7 @@ use type_sitter::Node;
 
 use crate::{
     astgen::{
-        ast::GDNodeKind,
+        ast::{GDNode, GDNodeKind},
         gdscript::{
             symbols::{
                 Add, AddEq, And as AndSymbol, AndAnd, AndDoubleQuote, AndEq, At, BitNot, BitXor,
@@ -24,11 +24,11 @@ use crate::{
             ClassNameStatement, Comment, ConditionalExpression, ConstStatement,
             ConstructorDefinition, ContinueStatement, DefaultParameter, Dictionary, ElifClause,
             ElseClause, EnumDefinition, Enumerator, EnumeratorList, EscapeSequence,
-            ExportVariableStatement, ExpressionStatement, ExtendsStatement, False, Float,
-            ForStatement, FunctionDefinition, GetBody, GetNode, Getter, Identifier, IfStatement,
-            InferredType, Integer, Lambda, LineContinuation, MatchBody, MatchStatement, Name,
-            NodePath, Null, OnreadyVariableStatement, Pair, Parameters, Parameters_,
-            ParenthesizedExpression, PassStatement, PatternBinding, PatternGuard,
+            ExportVariableStatement, Expression, ExpressionStatement, ExtendsStatement, False,
+            Float, ForStatement, FunctionDefinition, GetBody, GetNode, Getter, Identifier,
+            IfStatement, InferredType, Integer, Lambda, LineContinuation, MatchBody,
+            MatchStatement, Name, NodePath, Null, OnreadyVariableStatement, Pair, Parameters,
+            Parameters_, ParenthesizedExpression, PassStatement, PatternBinding, PatternGuard,
             PatternOpenEnding, PatternSection, RegionEnd, RegionLabel, RegionStart, RemoteKeyword,
             ReturnStatement, SetBody, Setget, Setter, SignalStatement, Source, StaticKeyword,
             String as GDString, StringName, Subscript, SubscriptArguments, True, Type,
@@ -293,10 +293,10 @@ impl Traverser {
     }
 
     pub fn visit_class_name_statement(&mut self, node: ClassNameStatement) -> anyhow::Result<()> {
-        if let GDNodeKind::Document { class_name, .. } = &mut self.root.kind {
+        if let GDNodeKind::Document { class_name, .. } = &mut self.scope.borrow_mut().kind {
             *class_name = Some(string_of_node_res!(self, node.name()));
         } else {
-            anyhow::bail!("root is not of kind Document");
+            anyhow::bail!("scope is not of kind Document");
         }
 
         Ok(())
@@ -356,7 +356,60 @@ impl Traverser {
         &mut self,
         node: ExportVariableStatement,
     ) -> anyhow::Result<()> {
-        Ok(())
+        anyhow::bail!("Godot 3 syntax is not supported!")
+    }
+
+    pub fn visit_expression(&mut self, node: Expression) -> anyhow::Result<String> {
+        // TODO
+        match node {
+            Expression::ConditionalExpression(e) => {
+                let left =
+                    self.visit_expression(wrap_err!(e.left(), "failed to get left expr")?)?;
+                let condition = self
+                    .visit_expression(wrap_err!(e.condition(), "failed to get condition expr")?)?;
+                let right =
+                    self.visit_expression(wrap_err!(e.right(), "failed to get right expr")?)?;
+
+                Ok(format!("{left} {condition} {right}"))
+            }
+            Expression::PrimaryExpression(e) => {
+                match e {
+                    super::gdscript::PrimaryExpression::Attribute(attribute) => {
+                        Ok(string_of_node!(self, attribute))
+                    }
+                    super::gdscript::PrimaryExpression::True(_) => Ok("true".to_owned()),
+                    super::gdscript::PrimaryExpression::False(_) => Ok("false".to_owned()),
+                    super::gdscript::PrimaryExpression::Null(null) => Ok("null".to_owned()),
+                    super::gdscript::PrimaryExpression::Integer(integer) => {
+                        Ok(string_of_node!(self, integer))
+                    }
+                    super::gdscript::PrimaryExpression::Float(float) => {
+                        Ok(string_of_node!(self, float))
+                    }
+                    super::gdscript::PrimaryExpression::String(str) => {
+                        Ok(string_of_node!(self, str))
+                    }
+                    super::gdscript::PrimaryExpression::Identifier(identifier) => {
+                        Ok(string_of_node!(self, identifier))
+                    }
+                    super::gdscript::PrimaryExpression::StringName(string_name) => {
+                        Ok(string_of_node!(self, string_name))
+                    }
+                    // super::gdscript::PrimaryExpression::Array(array) => todo!(),
+                    // super::gdscript::PrimaryExpression::AwaitExpression(await_expression) => todo!(),
+                    // super::gdscript::PrimaryExpression::BaseCall(base_call) => todo!(),
+                    // super::gdscript::PrimaryExpression::BinaryOperator(binary_operator) => todo!(),
+                    // super::gdscript::PrimaryExpression::Call(call) => todo!(),
+                    // super::gdscript::PrimaryExpression::Dictionary(dictionary) => todo!(),
+                    // super::gdscript::PrimaryExpression::GetNode(get_node) => todo!(),
+                    // super::gdscript::PrimaryExpression::NodePath(node_path) => todo!(),
+                    // super::gdscript::PrimaryExpression::ParenthesizedExpression(parenthesized_expression) => todo!(),
+                    // super::gdscript::PrimaryExpression::Subscript(subscript) => todo!(),
+                    // super::gdscript::PrimaryExpression::UnaryOperator(unary_operator) => todo!(),
+                    _ => Ok(string_of_node!(self, node)),
+                }
+            }
+        }
     }
 
     pub fn visit_expression_statement(&mut self, node: ExpressionStatement) -> anyhow::Result<()> {
@@ -364,7 +417,7 @@ impl Traverser {
     }
 
     pub fn visit_extends_statement(&mut self, node: ExtendsStatement) -> anyhow::Result<()> {
-        if let GDNodeKind::Document { extends, .. } = &mut self.root.kind {
+        if let GDNodeKind::Document { extends, .. } = &mut self.scope.borrow_mut().kind {
             *extends = Some(
                 string_of_node!(self, node)
                     .split(' ')
@@ -373,7 +426,7 @@ impl Traverser {
                     .join(" "),
             );
         } else {
-            anyhow::bail!("root is not of kind Document");
+            anyhow::bail!("scope is not of kind Document");
         }
 
         Ok(())
@@ -407,12 +460,14 @@ impl Traverser {
         Ok(())
     }
 
-    pub fn visit_inferred_type(&mut self, node: InferredType) -> anyhow::Result<()> {
-        Ok(())
+    pub fn visit_inferred_type(&mut self, node: InferredType) -> anyhow::Result<String> {
+        // TODO
+        Ok(string_of_node!(self, node))
     }
 
-    pub fn visit_lambda(&mut self, node: Lambda) -> anyhow::Result<()> {
-        Ok(())
+    pub fn visit_lambda(&mut self, node: Lambda) -> anyhow::Result<String> {
+        // TODO
+        Ok(string_of_node!(self, node))
     }
 
     pub fn visit_match_body(&mut self, node: MatchBody) -> anyhow::Result<()> {
@@ -435,7 +490,7 @@ impl Traverser {
         &mut self,
         node: OnreadyVariableStatement,
     ) -> anyhow::Result<()> {
-        Ok(())
+        anyhow::bail!("Godot 3 syntax is not supported!")
     }
 
     pub fn visit_pair(&mut self, node: Pair) -> anyhow::Result<()> {
@@ -513,8 +568,9 @@ impl Traverser {
         Ok(())
     }
 
-    pub fn visit_type(&mut self, node: Type) -> anyhow::Result<()> {
-        Ok(())
+    pub fn visit_type(&mut self, node: Type) -> anyhow::Result<String> {
+        // TODO
+        Ok(string_of_node!(self, node))
     }
 
     pub fn visit_typed_default_parameter(
@@ -537,6 +593,42 @@ impl Traverser {
     }
 
     pub fn visit_variable_statement(&mut self, node: VariableStatement) -> anyhow::Result<()> {
+        let var_type = node
+            .r#type()
+            .as_ref()
+            .map(|v| match wrap_err!(v, "failed to get type node")? {
+                crate::astgen::gdscript::anon_unions::InferredType_Type::InferredType(s) => {
+                    Ok(self.visit_inferred_type(s))
+                }
+                crate::astgen::gdscript::anon_unions::InferredType_Type::Type(s) => {
+                    Ok(self.visit_type(s))
+                }
+            })
+            .map(std::result::Result::flatten)
+            .transpose()?;
+        let value = node
+            .value()
+            .as_ref()
+            .map(|v| match wrap_err!(v, "failed to get value node")? {
+                super::gdscript::anon_unions::Expression_Lambda::Expression(expression) => {
+                    Ok(self.visit_expression(expression))
+                }
+                super::gdscript::anon_unions::Expression_Lambda::Lambda(lambda) => {
+                    Ok(self.visit_lambda(lambda))
+                }
+            })
+            .map(std::result::Result::flatten)
+            .transpose()?;
+        self.scope.borrow_mut().add_child(GDNode::new(
+            GDNodeKind::VariableDeclaration {
+                name: string_of_node_res!(self, node.name()),
+                is_static: node.r#static().is_some_and(|s| s.is_ok()),
+                value,
+                var_type,
+            },
+            vec![],
+        ));
+
         Ok(())
     }
 
